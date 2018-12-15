@@ -1,7 +1,7 @@
 use std::{env, error, fmt, fs, io};
 
 pub fn run() -> Result<(), GrepError> {
-    let params = SearchParams::from_args(env::args())?;
+    let params = SearchParams::from_args(env::args().collect())?;
     search(&params)?;
     Ok(())
 }
@@ -23,8 +23,9 @@ pub struct SearchParams {
 }
 
 impl SearchParams {
-    fn from_args(args: env::Args) -> Result<SearchParams, GrepError> {
-        let args: Vec<String> = args.collect();
+    fn from_args(args: Vec<String>) -> Result<SearchParams, GrepError>
+    {
+        // let args: Vec<String> = args.collect();
         if args.len() < 3 {
             return Err(GrepError::NotEnoughParams);
         }
@@ -53,3 +54,38 @@ impl fmt::Display for GrepError {
 }
 
 impl error::Error for GrepError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_params_zero_args() {
+        let params = SearchParams::from_args(Vec::new());
+        assert!(params.is_err());
+    }
+    #[test]
+    fn search_params_just_prog() {
+        let params = SearchParams::from_args(vec!["prog".to_string()]);
+        assert!(params.is_err());
+    }
+    #[test]
+    fn search_params_one_arg() {
+        let params = SearchParams::from_args(vec!["prog".to_string(), "two".to_string()]);
+        assert!(params.is_err());
+    }
+    #[test]
+    fn search_params_two_args() {
+        let params = SearchParams::from_args(vec!["prog".to_string(), "two".to_string(), "three".to_string()]);
+        let params = params.unwrap();
+        assert_eq!(params.term, "two");
+        assert_eq!(params.filename, "three");
+    }
+    #[test]
+    fn search_params_three_args() {
+        let params = SearchParams::from_args(vec!["prog".to_string(), "two".to_string(), "three".to_string(), "four".to_string()]);
+        let params = params.unwrap();
+        assert_eq!(params.term, "two three");
+        assert_eq!(params.filename, "four");
+    }
+}
