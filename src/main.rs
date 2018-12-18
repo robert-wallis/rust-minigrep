@@ -1,3 +1,4 @@
+// Copyright (C) 2018 Robert A. Wallis, all rights reserved.
 use minigrep;
 
 fn main() {

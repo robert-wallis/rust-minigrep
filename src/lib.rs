@@ -5,20 +5,29 @@ use std::{env, error, fmt, fs, io};
 pub fn run() -> Result<(), GrepError> {
     let args: Vec<String> = env::args().collect();
     let params = SearchParams::from_args(&args)?;
-    search(&params)?;
+    let contents = read_file(&params)?;
+    let results = search(&params.term, &contents)?;
+    println!("{}", results.join("\n"));
     Ok(())
 }
 
-/// Given some search parameters, runs a search on the file.
-pub fn search(params: &SearchParams) -> Result<(), GrepError> {
+/// Open the appropriate file.
+pub fn read_file(params: &SearchParams) -> Result<String, GrepError> {
     match fs::read_to_string(&params.filename) {
         Err(err) => Err(GrepError::IOError(params.filename.to_string(), err)),
-        Ok(contents) => {
-            eprintln!("Searching for \"{}\" in {}", &params.term, &params.filename);
-            println!("len {}", contents.len());
-            Ok(())
+        Ok(contents) => Ok(contents),
+    }
+}
+
+/// Find the text in the contents.
+pub fn search<'a>(query: &str, contents: &'a str) -> Result<Vec<&'a str>, GrepError> {
+    let mut results = Vec::new();
+    for line in contents.lines() {
+        if line.contains(query) {
+            results.push(line)
         }
     }
+    Ok(results)
 }
 
 /// Organized set of options for searching a file.
@@ -104,5 +113,18 @@ mod tests {
         let params = params.unwrap();
         assert_eq!(params.term, "two three");
         assert_eq!(params.filename, "four");
+    }
+
+    #[test]
+    fn one_result() {
+        let query = "duct";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.";
+        assert_eq!(
+            vec!["safe, fast, productive."],
+            search(query, contents).unwrap()
+        );
     }
 }
