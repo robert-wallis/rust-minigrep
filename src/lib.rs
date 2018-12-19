@@ -6,7 +6,7 @@ pub fn run() -> Result<(), GrepError> {
     let args: Vec<String> = env::args().collect();
     let params = SearchParams::from_args(&args)?;
     let contents = read_file(&params)?;
-    for result in search(&params.term, &contents) {
+    for result in search(&params, &contents) {
         println!("{}", result);
     }
     Ok(())
@@ -21,20 +21,27 @@ pub fn read_file(params: &SearchParams) -> Result<String, GrepError> {
 }
 
 /// Find the text in the contents.
-pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
-    let mut results = Vec::new();
-    for line in contents.lines() {
-        if line.contains(query) {
-            results.push(line)
-        }
+pub fn search<'a>(params: &'a SearchParams, contents: &'a str) -> Vec<&'a str> {
+    let term = &params.term;
+    if params.case_insensitive {
+        contents
+            .lines()
+            .filter(|line| line.contains(term))
+            .collect()
+    } else {
+        let term = &term.to_lowercase();
+        contents
+            .lines()
+            .filter(|line| line.to_lowercase().contains(term))
+            .collect()
     }
-    results
 }
 
 /// Organized set of options for searching a file.
 pub struct SearchParams {
     pub term: String,
     pub filename: String,
+    pub case_insensitive: bool,
 }
 
 impl SearchParams {
@@ -43,9 +50,18 @@ impl SearchParams {
         if args.len() < 3 {
             return Err(GrepError::NotEnoughParams);
         }
-        let term = String::from(&args[1..args.len() - 1].join(" ")[..]);
+        let (case_insensitive, start_arg) = if &args[1] == "-s" {
+            (false, 2)
+        } else {
+            (true, 1)
+        };
+        let term = String::from(&args[start_arg..args.len() - 1].join(" ")[..]);
         let filename = String::from(&args[args.len() - 1][..]);
-        Ok(SearchParams { term, filename })
+        Ok(SearchParams {
+            term,
+            filename,
+            case_insensitive,
+        })
     }
 }
 
@@ -61,7 +77,7 @@ pub enum GrepError {
 impl fmt::Display for GrepError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            GrepError::NotEnoughParams => write!(f, "usage: minigrep keywords filename"),
+            GrepError::NotEnoughParams => write!(f, "usage: minigrep [-s] keywords filename"),
             GrepError::IOError(filename, err) => match err.kind() {
                 io::ErrorKind::NotFound => write!(f, "File {} not found.", filename),
                 _ => write!(f, "{}", err),
@@ -77,6 +93,10 @@ impl error::Error for GrepError {}
 mod tests {
     use super::*;
 
+    fn args(a: &[&str]) -> Vec<String> {
+        a.iter().map(|&s| String::from(s)).collect::<Vec<String>>()
+    }
+
     #[test]
     fn search_params_zero_args() {
         let params = SearchParams::from_args(&Vec::new());
@@ -84,48 +104,81 @@ mod tests {
     }
     #[test]
     fn search_params_just_prog() {
-        let params = SearchParams::from_args(&vec!["prog".to_string()]);
+        let params = SearchParams::from_args(&args(&vec!["minigrep"]));
         assert!(params.is_err());
     }
     #[test]
     fn search_params_one_arg() {
-        let params = SearchParams::from_args(&vec!["prog".to_string(), "two".to_string()]);
+        let params = SearchParams::from_args(&args(&vec!["minigrep", "two"]));
         assert!(params.is_err());
     }
     #[test]
     fn search_params_two_args() {
-        let params = SearchParams::from_args(&vec![
-            "prog".to_string(),
-            "two".to_string(),
-            "three".to_string(),
-        ]);
+        let params = SearchParams::from_args(&args(&vec!["minigrep", "two", "three"]));
         let params = params.unwrap();
         assert_eq!(params.term, "two");
         assert_eq!(params.filename, "three");
     }
     #[test]
     fn search_params_three_args() {
-        let params = SearchParams::from_args(&vec![
-            "prog".to_string(),
-            "two".to_string(),
-            "three".to_string(),
-            "four".to_string(),
-        ]);
+        let params = SearchParams::from_args(&args(&vec!["minigrep", "two", "three", "four"]));
         let params = params.unwrap();
         assert_eq!(params.term, "two three");
         assert_eq!(params.filename, "four");
     }
 
     #[test]
-    fn one_result() {
-        let query = "duct";
-        let contents = "\
-Rust:
-safe, fast, productive.
-Pick three.";
-        assert_eq!(
-            vec!["safe, fast, productive."],
-            search(query, contents)
-        );
+    fn search_params_args_case_sensitive() {
+        let params =
+            SearchParams::from_args(&args(&vec!["minigrep", "-s", "term", "filename"])).unwrap();
+        assert_eq!(params.term, "term");
+        assert_eq!(params.filename, "filename");
+        assert_eq!(params.case_insensitive, false);
+
+        let params = SearchParams::from_args(&args(&vec!["minigrep", "term", "filename"])).unwrap();
+        assert_eq!(params.term, "term");
+        assert_eq!(params.filename, "filename");
+        assert_eq!(params.case_insensitive, true);
+    }
+
+    fn search_params(term: &str) -> SearchParams {
+        SearchParams {
+            term: String::from(term),
+            filename: String::from("test_file"),
+            case_insensitive: true,
+        }
+    }
+
+    fn search_params_case_sensitive(term: &str) -> SearchParams {
+        SearchParams {
+            term: String::from(term),
+            filename: String::from("test_file"),
+            case_insensitive: false,
+        }
+    }
+
+    #[test]
+    fn search_one_result() {
+        let query = search_params("Robert");
+        assert_eq!(vec!["Robert"], search(&query, "Rob\nRobert"));
+    }
+
+    #[test]
+    fn search_two_results() {
+        let query = search_params("Rob");
+        assert_eq!(vec!["Rob", "Robert"], search(&query, "Rob\nRobert"));
+    }
+
+    #[test]
+    fn search_zero_results() {
+        let query = search_params("Bob");
+        let empty: Vec<String> = Vec::new();
+        assert_eq!(empty, search(&query, "Rob\nRobert"));
+    }
+
+    #[test]
+    fn search_case_sensitive() {
+        let query = search_params_case_sensitive("rob");
+        assert_eq!(vec!["Rob", "Robert"], search(&query, "Rob\nRobert"));
     }
 }
