@@ -23,16 +23,16 @@ pub fn read_file(params: &SearchParams) -> Result<String, GrepError> {
 /// Find the text in the contents.
 pub fn search<'a>(params: &'a SearchParams, contents: &'a str) -> Vec<&'a str> {
     let term = &params.term;
-    if params.case_insensitive {
-        contents
-            .lines()
-            .filter(|line| line.contains(term))
-            .collect()
-    } else {
+    if params.ignore_case {
         let term = &term.to_lowercase();
         contents
             .lines()
             .filter(|line| line.to_lowercase().contains(term))
+            .collect()
+    } else {
+        contents
+            .lines()
+            .filter(|line| line.contains(term))
             .collect()
     }
 }
@@ -41,7 +41,7 @@ pub fn search<'a>(params: &'a SearchParams, contents: &'a str) -> Vec<&'a str> {
 pub struct SearchParams {
     pub term: String,
     pub filename: String,
-    pub case_insensitive: bool,
+    pub ignore_case: bool,
 }
 
 impl SearchParams {
@@ -50,17 +50,17 @@ impl SearchParams {
         if args.len() < 3 {
             return Err(GrepError::NotEnoughParams);
         }
-        let (case_insensitive, start_arg) = if &args[1] == "-s" {
-            (false, 2)
+        let (ignore_case, start_arg) = if &args[1] == "-i" {
+            (true, 2)
         } else {
-            (true, 1)
+            (false, 1)
         };
         let term = String::from(&args[start_arg..args.len() - 1].join(" ")[..]);
         let filename = String::from(&args[args.len() - 1][..]);
         Ok(SearchParams {
             term,
             filename,
-            case_insensitive,
+            ignore_case,
         })
     }
 }
@@ -77,7 +77,7 @@ pub enum GrepError {
 impl fmt::Display for GrepError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            GrepError::NotEnoughParams => write!(f, "usage: minigrep [-s] keywords filename"),
+            GrepError::NotEnoughParams => write!(f, "usage: minigrep [-i] keywords filename"),
             GrepError::IOError(filename, err) => match err.kind() {
                 io::ErrorKind::NotFound => write!(f, "File {} not found.", filename),
                 _ => write!(f, "{}", err),
@@ -130,30 +130,30 @@ mod tests {
     #[test]
     fn search_params_args_case_sensitive() {
         let params =
-            SearchParams::from_args(&args(&vec!["minigrep", "-s", "term", "filename"])).unwrap();
+            SearchParams::from_args(&args(&vec!["minigrep", "-i", "term", "filename"])).unwrap();
         assert_eq!(params.term, "term");
         assert_eq!(params.filename, "filename");
-        assert_eq!(params.case_insensitive, false);
+        assert_eq!(params.ignore_case, true);
 
         let params = SearchParams::from_args(&args(&vec!["minigrep", "term", "filename"])).unwrap();
         assert_eq!(params.term, "term");
         assert_eq!(params.filename, "filename");
-        assert_eq!(params.case_insensitive, true);
+        assert_eq!(params.ignore_case, false);
     }
 
     fn search_params(term: &str) -> SearchParams {
         SearchParams {
             term: String::from(term),
             filename: String::from("test_file"),
-            case_insensitive: true,
+            ignore_case: false,
         }
     }
 
-    fn search_params_case_sensitive(term: &str) -> SearchParams {
+    fn search_params_ignore_case(term: &str) -> SearchParams {
         SearchParams {
             term: String::from(term),
             filename: String::from("test_file"),
-            case_insensitive: false,
+            ignore_case: true,
         }
     }
 
@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn search_case_sensitive() {
-        let query = search_params_case_sensitive("rob");
+        let query = search_params_ignore_case("rob");
         assert_eq!(vec!["Rob", "Robert"], search(&query, "Rob\nRobert"));
     }
 }
