@@ -6,8 +6,9 @@ pub fn run() -> Result<(), GrepError> {
     let args: Vec<String> = env::args().collect();
     let params = SearchParams::from_args(&args)?;
     let contents = read_file(&params)?;
-    let results = search(&params.term, &contents)?;
-    println!("{}", results.join("\n"));
+    for result in search(&params.term, &contents) {
+        println!("{}", result);
+    }
     Ok(())
 }
 
@@ -20,14 +21,14 @@ pub fn read_file(params: &SearchParams) -> Result<String, GrepError> {
 }
 
 /// Find the text in the contents.
-pub fn search<'a>(query: &str, contents: &'a str) -> Result<Vec<&'a str>, GrepError> {
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
     let mut results = Vec::new();
     for line in contents.lines() {
         if line.contains(query) {
             results.push(line)
         }
     }
-    Ok(results)
+    results
 }
 
 /// Organized set of options for searching a file.
@@ -124,7 +125,7 @@ safe, fast, productive.
 Pick three.";
         assert_eq!(
             vec!["safe, fast, productive."],
-            search(query, contents).unwrap()
+            search(query, contents)
         );
     }
 }
