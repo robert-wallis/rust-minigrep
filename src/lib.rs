@@ -21,7 +21,7 @@ pub fn read_file(params: &SearchParams) -> Result<String, GrepError> {
 }
 
 /// Find the text in the contents.
-pub fn search<'a>(params: &'a SearchParams, contents: &'a str) -> Vec<&'a str> {
+pub fn search<'a>(params: &SearchParams, contents: &'a str) -> Vec<&'a str> {
     let term = term_for_params(&params);
     contents
         .lines()
