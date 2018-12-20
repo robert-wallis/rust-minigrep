@@ -22,18 +22,28 @@ pub fn read_file(params: &SearchParams) -> Result<String, GrepError> {
 
 /// Find the text in the contents.
 pub fn search<'a>(params: &'a SearchParams, contents: &'a str) -> Vec<&'a str> {
-    let term = &params.term;
+    let term = term_for_params(&params);
+    contents
+        .lines()
+        .filter(|line| line_for_params(&params, line).contains(&term))
+        .collect()
+}
+
+/// Modify the term based on the recipe in the SearchParams.
+fn term_for_params(params: &SearchParams) -> String {
     if params.ignore_case {
-        let term = &term.to_lowercase();
-        contents
-            .lines()
-            .filter(|line| line.to_lowercase().contains(term))
-            .collect()
+        params.term.to_lowercase()
     } else {
-        contents
-            .lines()
-            .filter(|line| line.contains(term))
-            .collect()
+        params.term.to_string()
+    }
+}
+
+/// Modify each line based on the recipe in the SearchParams.
+fn line_for_params(params: &SearchParams, line: &str) -> String {
+    if params.ignore_case {
+        line.to_lowercase()
+    } else {
+        line.to_string()
     }
 }
 
