@@ -1,24 +1,24 @@
 // Copyright (C) 2018 Robert A. Wallis, all rights reserved.
-use std::{env, error, fmt, fs, io};
 
-/// Checks the program args, as search paramaters.  And then runs a search on the file.
-pub fn run() -> Result<(), GrepError> {
-    let args: Vec<String> = env::args().collect();
-    let params = SearchParams::from_args(&args)?;
-    let contents = read_file(&params)?;
-    for result in search(&params, &contents) {
-        println!("{}", result);
-    }
-    Ok(())
-}
+//! Searches through files like grep, but with less features.
+//! ```
+//! use minigrep::{SearchParams, search};
+//! 
+//! let params = SearchParams {
+//!     term: "robot".to_string(),
+//!     filename: "example.txt".to_string(),
+//!     ignore_case: true
+//! };
+//! 
+//! assert_eq!(
+//!     vec!["Domo arigato Mr. Roboto."],
+//!     search(&params, "Hey there\nDomo arigato Mr. Roboto.\nDomo...\nDomo...")
+//! );
+//! ```
 
-/// Open the appropriate file.
-pub fn read_file(params: &SearchParams) -> Result<String, GrepError> {
-    match fs::read_to_string(&params.filename) {
-        Err(err) => Err(GrepError::IOError(params.filename.to_string(), err)),
-        Ok(contents) => Ok(contents),
-    }
-}
+use std::fs;
+mod error;
+pub use self::error::GrepError;
 
 /// Find the text in the contents.
 pub fn search<'a>(params: &SearchParams, contents: &'a str) -> Vec<&'a str> {
@@ -27,6 +27,34 @@ pub fn search<'a>(params: &SearchParams, contents: &'a str) -> Vec<&'a str> {
         .lines()
         .filter(|line| line_for_params(&params, line).contains(&term))
         .collect()
+}
+
+/// Organized set of options for searching a file.
+pub struct SearchParams {
+    pub term: String,
+    pub filename: String,
+    pub ignore_case: bool,
+}
+
+impl SearchParams {
+    /// Given &sys::env::args().collect(), from_args() returns a filled out SearchParams.
+    pub fn from_args(args: &[String]) -> Result<SearchParams, GrepError> {
+        if args.len() < 3 {
+            return Err(GrepError::NotEnoughParams);
+        }
+        let (ignore_case, start_arg) = if &args[1] == "-i" {
+            (true, 2)
+        } else {
+            (false, 1)
+        };
+        let term = String::from(&args[start_arg..args.len() - 1].join(" ")[..]);
+        let filename = String::from(&args[args.len() - 1][..]);
+        Ok(SearchParams {
+            term,
+            filename,
+            ignore_case,
+        })
+    }
 }
 
 /// Modify the term based on the recipe in the SearchParams.
@@ -47,57 +75,13 @@ fn line_for_params(params: &SearchParams, line: &str) -> String {
     }
 }
 
-/// Organized set of options for searching a file.
-pub struct SearchParams {
-    pub term: String,
-    pub filename: String,
-    pub ignore_case: bool,
-}
-
-impl SearchParams {
-    /// Given &sys::env::args().collect(), from_args() returns a filled out SearchParams.
-    fn from_args(args: &[String]) -> Result<SearchParams, GrepError> {
-        if args.len() < 3 {
-            return Err(GrepError::NotEnoughParams);
-        }
-        let (ignore_case, start_arg) = if &args[1] == "-i" {
-            (true, 2)
-        } else {
-            (false, 1)
-        };
-        let term = String::from(&args[start_arg..args.len() - 1].join(" ")[..]);
-        let filename = String::from(&args[args.len() - 1][..]);
-        Ok(SearchParams {
-            term,
-            filename,
-            ignore_case,
-        })
+/// Open the appropriate file.
+pub fn read_file(params: &SearchParams) -> Result<String, GrepError> {
+    match fs::read_to_string(&params.filename) {
+        Err(err) => Err(GrepError::IOError(params.filename.to_string(), err)),
+        Ok(contents) => Ok(contents),
     }
 }
-
-#[derive(Debug)]
-pub enum GrepError {
-    /// program needs more agurments to run correctly
-    NotEnoughParams,
-    /// the OS returned a filesystem error
-    IOError(String, io::Error),
-}
-
-/// Used by print to turn GrepError enum into a string.
-impl fmt::Display for GrepError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            GrepError::NotEnoughParams => write!(f, "usage: minigrep [-i] keywords filename"),
-            GrepError::IOError(filename, err) => match err.kind() {
-                io::ErrorKind::NotFound => write!(f, "File {} not found.", filename),
-                _ => write!(f, "{}", err),
-            },
-        }
-    }
-}
-
-/// Makes GrepError compatable with rust errors, so a function can use dyn Error type.
-impl error::Error for GrepError {}
 
 #[cfg(test)]
 mod tests {
